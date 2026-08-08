@@ -27,17 +27,20 @@ const WIDTH = 2000;
 const GAP_MS = 1200;
 const MAX_ATTEMPTS = 5;
 
-/* Each destination lists Commons categories in preference order. If none of
-   them yield a usable photo the script falls back to a file search. */
+/* Every destination now uses a photograph supplied by the owner, so all
+   targets are skipped: re-running this must never overwrite them. The
+   categories are kept so the script still works for a future destination —
+   drop `skip` from a target to fetch it.
+
+   Commons was tried first and mostly failed for this itinerary. It ranks by
+   file size, not suitability, and its best offers included a night fire
+   scene, EAT THE RICH graffiti, a political rally and a shoal of fish. */
 const TARGETS = [
-  // pick indices below were chosen by reviewing the candidate contact sheets;
-  // rank 2 is the dusk cliff view, which belongs in the hero, not rank 1's
-  // flat midday shot.
-  { key: 'hero',              out: 'assets/lebanon/hero/hero.jpg',    pick: 2,
+  { key: 'hero',              out: 'assets/lebanon/hero/hero.jpg', skip: true,
     cats: ['Raouche Rocks', 'Beirut Corniche'],           search: 'Raouche rocks Beirut sunset' },
-  { key: 'raouche',           out: 'assets/lebanon/raouche/raouche.jpg', pick: 1,
+  { key: 'raouche',           out: 'assets/lebanon/raouche/raouche.jpg', skip: true,
     cats: ['Raouche Rocks'],                              search: 'Raouche rocks Beirut' },
-  { key: 'mohammad-al-amin',  out: 'assets/lebanon/mohammad-al-amin/mohammad-al-amin.jpg',
+  { key: 'mohammad-al-amin',  out: 'assets/lebanon/mohammad-al-amin/mohammad-al-amin.jpg', skip: true,
     cats: ['Mohammad Al-Amin Mosque', 'Mohammad Al-Amin Mosque (Beirut)'],
     search: 'Mohammad Al-Amin Mosque Beirut' },
   { key: 'martyrs-square',    out: 'assets/lebanon/martyrs-square/martyrs-square.jpg', skip: true, // Commons offers a Shatila memorial and a concert
@@ -47,31 +50,31 @@ const TARGETS = [
     cats: ['Zaitunay Bay', 'Beirut Marina'],              search: 'Zaitunay Bay Beirut marina' },
   { key: 'hamra',             out: 'assets/lebanon/hamra/hamra.jpg', skip: true, // Commons offers an ice-cream cart
     cats: ['Hamra Street', 'Hamra, Beirut'],              search: 'Hamra street Beirut' },
-  { key: 'jeita',             out: 'assets/lebanon/jeita/jeita.jpg',   pick: 6,
+  { key: 'jeita',             out: 'assets/lebanon/jeita/jeita.jpg', skip: true,
     cats: ['Jeita Grotto'],                               search: 'Jeita Grotto Lebanon' },
-  { key: 'cable-car',         out: 'assets/lebanon/cable-car/cable-car.jpg', pick: 5,
+  { key: 'cable-car',         out: 'assets/lebanon/cable-car/cable-car.jpg', skip: true,
     cats: ['Téléphérique de Jounieh', 'Harissa, Lebanon'], search: 'Harissa teleferique Jounieh cable car' },
-  { key: 'pine-yards',        out: 'assets/lebanon/pine-yards/pine-yards.jpg',
+  { key: 'pine-yards',        out: 'assets/lebanon/pine-yards/pine-yards.jpg', skip: true,
     cats: ['Pine Forest of Beirut', 'Horsh Beirut'],      search: 'Beirut pine forest Horsh' },
-  { key: 'byblos',            out: 'assets/lebanon/byblos/byblos.jpg',
+  { key: 'byblos',            out: 'assets/lebanon/byblos/byblos.jpg', skip: true,
     cats: ['Port of Byblos', 'Byblos Castle', 'Byblos'],  search: 'Byblos old harbour castle' },
-  { key: 'batroun',           out: 'assets/lebanon/batroun/batroun.jpg',
+  { key: 'batroun',           out: 'assets/lebanon/batroun/batroun.jpg', skip: true,
     cats: ['Batroun'],                                    search: 'Batroun Lebanon sea wall' },
-  { key: 'deir-el-qamar',     out: 'assets/lebanon/deir-el-qamar/deir-el-qamar.jpg',
+  { key: 'deir-el-qamar',     out: 'assets/lebanon/deir-el-qamar/deir-el-qamar.jpg', skip: true,
     cats: ['Deir el Qamar', 'Deir al-Qamar'],             search: 'Deir el Qamar Lebanon' },
-  { key: 'moussa-castle',     out: 'assets/lebanon/moussa-castle/moussa-castle.jpg',
+  { key: 'moussa-castle',     out: 'assets/lebanon/moussa-castle/moussa-castle.jpg', skip: true,
     cats: ['Moussa Castle'],                              search: 'Moussa Castle Lebanon Deir el Qamar' },
   // شلالات الزرقاء = the blue waterfalls on the Baakline river, Chouf.
   // Supplied directly by the owner — Commons has no usable photo of this spot.
   { key: 'blue-waterfalls',   out: 'assets/lebanon/blue-waterfalls/blue-waterfalls.jpg', skip: true,
     cats: ['Baakline', 'Baakline River', 'Waterfalls of Lebanon'],
     search: 'Baakline river waterfall Chouf' },
-  { key: 'free-day',          out: 'assets/lebanon/free-day/free-day.jpg',
+  { key: 'free-day',          out: 'assets/lebanon/free-day/free-day.jpg', skip: true,
     cats: ['Beirut Corniche', 'Beirut'],                  search: 'Beirut street cafe corniche' },
   { key: 'departure',         out: 'assets/lebanon/departure/departure.jpg', skip: true, // Commons offers a night fire scene
     cats: ['Beirut–Rafic Hariri International Airport', 'Beirut'],
     search: 'Beirut Rafic Hariri airport' },
-  { key: 'final-cta',         out: 'assets/lebanon/final-cta/final-cta.jpg',
+  { key: 'final-cta',         out: 'assets/lebanon/final-cta/final-cta.jpg', skip: true,
     cats: ['Byblos', 'Beirut Corniche'],                  search: 'Lebanon coast sunset' },
 ];
 
@@ -217,7 +220,7 @@ for (const t of TARGETS) {
   if (ONLY && t.key !== ONLY) continue;
 
   if (t.skip && !CANDIDATES) {
-    console.log(`·  ${t.key.padEnd(18)} skipped — needs a real photo, see IMAGES.md`);
+    console.log(`·  ${t.key.padEnd(18)} skipped — using the supplied photograph`);
     continue;
   }
 
@@ -347,10 +350,10 @@ if (failed.length) {
   console.log(`  node scripts/fetch-images.mjs --only=${failed[0][0]} --pick=2 --force`);
 }
 console.log(`
-Still needs your own files (not on Commons):
-  assets/logo/elbakri-logo.png   official logo  -> node scripts/prepare-logo.mjs
-  assets/hotel/hotel-main.jpg    Midtown Hotel, from the hotel or your own photos
-  assets/hotel/hotel-1..3.jpg
-  assets/trips/trip-01..05.jpg   your previous-trip photos
-  assets/og/og-cover.jpg         1200x630 share image
+Every destination currently uses a photograph supplied by the owner, so this
+script has nothing to fetch. To source a new destination from Commons, add a
+target above without \`skip\` and re-run.
+
+Still worth adding by hand:
+  assets/og/og-cover.jpg   1200x630 share image for Facebook and WhatsApp
 `);
