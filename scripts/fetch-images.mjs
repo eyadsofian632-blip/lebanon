@@ -62,7 +62,8 @@ const TARGETS = [
   { key: 'moussa-castle',     out: 'assets/lebanon/moussa-castle/moussa-castle.jpg',
     cats: ['Moussa Castle'],                              search: 'Moussa Castle Lebanon Deir el Qamar' },
   // شلالات الزرقاء = the blue waterfalls on the Baakline river, Chouf.
-  { key: 'blue-waterfalls',   out: 'assets/lebanon/blue-waterfalls/blue-waterfalls.jpg',
+  // Supplied directly by the owner — Commons has no usable photo of this spot.
+  { key: 'blue-waterfalls',   out: 'assets/lebanon/blue-waterfalls/blue-waterfalls.jpg', skip: true,
     cats: ['Baakline', 'Baakline River', 'Waterfalls of Lebanon'],
     search: 'Baakline river waterfall Chouf' },
   { key: 'free-day',          out: 'assets/lebanon/free-day/free-day.jpg',
