@@ -8,6 +8,11 @@ on:
       count:
         description: 'Candidates per destination'
         default: '8'
+  # Dispatch needs actions:write, which the automation token lacks; a push to
+  # this file is the trigger that reliably works.
+  push:
+    branches: [main]
+    paths: ['.github/workflows/candidates.yml']
 
 permissions:
   contents: write
@@ -19,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: node scripts/fetch-images.mjs --candidates=${{ inputs.count }}
+      - run: node scripts/fetch-images.mjs --candidates=${{ inputs.count || '8' }}
       - name: Commit candidates
         run: |
           git config user.name  "github-actions[bot]"
