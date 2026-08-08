@@ -89,9 +89,19 @@ for (let i = 0; i < data.length; i += 4) {
 }
 
 await fs.mkdir(path.dirname(OUT), { recursive: true });
-await sharp(data, { raw: { width, height, channels: 4 } })
+
+/**
+ * Trim the now-transparent margin. Without this the file keeps the source's
+ * full canvas — often a big square with the mark floating in the middle — and
+ * CSS sizes that whole canvas, so `height: 26px` renders the wordmark at a few
+ * pixels tall. Trimming crops empty space only; the artwork is not touched.
+ */
+const trimmed = await sharp(data, { raw: { width, height, channels: 4 } })
   .png({ compressionLevel: 9 })
-  .toFile(OUT);
+  .trim({ threshold: 1 })
+  .toBuffer({ resolveWithObject: true });
+
+await fs.writeFile(OUT, trimmed.data);
 
 /* Square icon on the brand navy, logo centred with breathing room. */
 await sharp({
@@ -107,7 +117,8 @@ await sharp({
 const pct = ((cleared / (width * height)) * 100).toFixed(1);
 console.log(`background sampled: rgb(${bg.join(', ')})`);
 console.log(`cleared ${pct}% of pixels`);
-console.log(`wrote ${path.relative(ROOT, OUT)}  (${width}x${height})`);
+console.log(`trimmed ${width}x${height} -> ${trimmed.info.width}x${trimmed.info.height}`);
+console.log(`wrote ${path.relative(ROOT, OUT)}`);
 console.log(`wrote ${path.relative(ROOT, ICON)}  (180x180)`);
 if (Number(pct) < 20) {
   console.log(`\nOnly ${pct}% was cleared — if a background remains, retry with a
