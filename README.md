@@ -37,8 +37,10 @@ python3 -m http.server 8000
 
 ### 1) ضيف الدومين في Vercel
 
-في المشروع → **Settings** → **Domains** → اكتب دومينك (مثلاً `elbakri.com`)
-→ **Add**. Vercel هيديك القيم اللي تحطها في GoDaddy.
+في المشروع → **Settings** → **Domains** → اكتب دومينك → **Add**.
+Vercel هيديك القيم اللي تحطها في GoDaddy.
+
+> الموقع ده متربوط دلوقتي على **`lebanon.elbakrioverseas.com`**.
 
 ### 2) ظبّط الـ DNS في GoDaddy
 
@@ -53,7 +55,20 @@ python3 -m http.server 8000
 > لو لقيت `A` أو `CNAME` قديمة على `@` أو `www` (بيحطها GoDaddy لصفحة
 > «Parked»)، **امسحها** — لو سيبتها الدومين هيفضل يودّي على صفحة جودادي.
 
-اعتمد على القيم اللي Vercel نفسه بيعرضها لو اختلفت عن الجدول ده.
+**لو بتستخدم ساب دومين** (زي `lebanon.elbakrioverseas.com`) بدل الدومين
+الأساسي، محتاج `CNAME` واحد بس — مش سجل `A`:
+
+| Type | Name | Value |
+|---|---|---|
+| `CNAME` | `lebanon` | `cname.vercel-dns.com` |
+
+في خانة Name اكتب الجزء الأول بس (`lebanon`)، جودادي بيضيف باقي الدومين لوحده.
+
+**ولو Vercel قال «Verification Required»** وظهر تحذير إن الدومين مربوط بحساب
+Vercel تاني، هتحتاج كمان سجل `TXT` اسمه `_vercel` بالقيمة اللي Vercel بيعرضها
+في **View DNS configuration**. من غيره الدومين مش هيتفعّل مهما استنيت.
+
+اعتمد على القيم اللي Vercel نفسه بيعرضها لو اختلفت عن الجداول دي.
 
 ### 3) استنى الـ DNS
 
@@ -62,10 +77,10 @@ SSL أوتوماتيك. تقدر تتابع الحالة من نفس صفحة **
 
 ### 4) ⚠️ حدّث الدومين في الكود — خطوة مهمة
 
-الموقع لسه مكتوب فيه `elbakri-lebanon.vercel.app`. غيّره بأمر واحد:
+بعد ما الدومين يتفعّل، غيّره في الكود بأمر واحد:
 
 ```bash
-node scripts/set-domain.mjs elbakri.com
+node scripts/set-domain.mjs your-domain.com
 git add -A && git commit -m "Point the site at the live domain" && git push
 ```
 
