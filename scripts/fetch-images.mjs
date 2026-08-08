@@ -30,23 +30,26 @@ const MAX_ATTEMPTS = 5;
 /* Each destination lists Commons categories in preference order. If none of
    them yield a usable photo the script falls back to a file search. */
 const TARGETS = [
-  { key: 'hero',              out: 'assets/lebanon/hero/hero.jpg',
+  // pick indices below were chosen by reviewing the candidate contact sheets;
+  // rank 2 is the dusk cliff view, which belongs in the hero, not rank 1's
+  // flat midday shot.
+  { key: 'hero',              out: 'assets/lebanon/hero/hero.jpg',    pick: 2,
     cats: ['Raouche Rocks', 'Beirut Corniche'],           search: 'Raouche rocks Beirut sunset' },
-  { key: 'raouche',           out: 'assets/lebanon/raouche/raouche.jpg',
+  { key: 'raouche',           out: 'assets/lebanon/raouche/raouche.jpg', pick: 1,
     cats: ['Raouche Rocks'],                              search: 'Raouche rocks Beirut' },
   { key: 'mohammad-al-amin',  out: 'assets/lebanon/mohammad-al-amin/mohammad-al-amin.jpg',
     cats: ['Mohammad Al-Amin Mosque', 'Mohammad Al-Amin Mosque (Beirut)'],
     search: 'Mohammad Al-Amin Mosque Beirut' },
-  { key: 'martyrs-square',    out: 'assets/lebanon/martyrs-square/martyrs-square.jpg',
+  { key: 'martyrs-square',    out: 'assets/lebanon/martyrs-square/martyrs-square.jpg', skip: true, // Commons offers a Shatila memorial and a concert
     cats: ["Martyrs' Square, Beirut", 'Martyrs Square, Beirut'],
     search: "Martyrs' Square Beirut" },
-  { key: 'zaitunay-bay',      out: 'assets/lebanon/zaitunay-bay/zaitunay-bay.jpg',
+  { key: 'zaitunay-bay',      out: 'assets/lebanon/zaitunay-bay/zaitunay-bay.jpg', skip: true, // Commons offers underwater fish shots
     cats: ['Zaitunay Bay', 'Beirut Marina'],              search: 'Zaitunay Bay Beirut marina' },
-  { key: 'hamra',             out: 'assets/lebanon/hamra/hamra.jpg',
+  { key: 'hamra',             out: 'assets/lebanon/hamra/hamra.jpg', skip: true, // Commons offers an ice-cream cart
     cats: ['Hamra Street', 'Hamra, Beirut'],              search: 'Hamra street Beirut' },
-  { key: 'jeita',             out: 'assets/lebanon/jeita/jeita.jpg',
+  { key: 'jeita',             out: 'assets/lebanon/jeita/jeita.jpg',   pick: 6,
     cats: ['Jeita Grotto'],                               search: 'Jeita Grotto Lebanon' },
-  { key: 'cable-car',         out: 'assets/lebanon/cable-car/cable-car.jpg',
+  { key: 'cable-car',         out: 'assets/lebanon/cable-car/cable-car.jpg', pick: 5,
     cats: ['Téléphérique de Jounieh', 'Harissa, Lebanon'], search: 'Harissa teleferique Jounieh cable car' },
   { key: 'pine-yards',        out: 'assets/lebanon/pine-yards/pine-yards.jpg',
     cats: ['Pine Forest of Beirut', 'Horsh Beirut'],      search: 'Beirut pine forest Horsh' },
@@ -64,7 +67,7 @@ const TARGETS = [
     search: 'Baakline river waterfall Chouf' },
   { key: 'free-day',          out: 'assets/lebanon/free-day/free-day.jpg',
     cats: ['Beirut Corniche', 'Beirut'],                  search: 'Beirut street cafe corniche' },
-  { key: 'departure',         out: 'assets/lebanon/departure/departure.jpg',
+  { key: 'departure',         out: 'assets/lebanon/departure/departure.jpg', skip: true, // Commons offers a night fire scene
     cats: ['Beirut–Rafic Hariri International Airport', 'Beirut'],
     search: 'Beirut Rafic Hariri airport' },
   { key: 'final-cta',         out: 'assets/lebanon/final-cta/final-cta.jpg',
@@ -212,6 +215,11 @@ const claimed = new Set();
 for (const t of TARGETS) {
   if (ONLY && t.key !== ONLY) continue;
 
+  if (t.skip && !CANDIDATES) {
+    console.log(`·  ${t.key.padEnd(18)} skipped — needs a real photo, see IMAGES.md`);
+    continue;
+  }
+
   const dest = path.join(ROOT, t.out);
   if (!CANDIDATES && !FORCE && await exists(dest)) {
     console.log(`·  ${t.key.padEnd(18)} already present, skipping`);
@@ -240,9 +248,11 @@ for (const t of TARGETS) {
 
   let picked = null;
   let source = '';
-  const take = (ranked) => {
-    const free = ranked.filter((c) => !claimed.has(c.title));
-    return free[Math.min(PICK, free.length) - 1] || null;
+  const want = t.pick || PICK;
+  const take = (pool) => {
+    const at = pool[want - 1];
+    if (at && !claimed.has(at.title)) return at;
+    return pool.find((c) => !claimed.has(c.title)) || null;
   };
 
   try {
