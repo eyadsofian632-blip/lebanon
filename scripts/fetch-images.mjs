@@ -20,8 +20,12 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://commons.wikimedia.org/w/api.php';
-const UA = 'elbakri-lebanon-landing/1.0 (static site asset fetcher)';
+/* Wikimedia's UA policy wants a contact URL; a generic agent gets throttled. */
+const UA = 'elbakri-lebanon-landing/1.0 (+https://github.com/eyadsofian632-blip/lebanon) node-fetch';
 const WIDTH = 2000;
+/* Commons answers 429 when hit in a tight loop, especially from shared CI IPs. */
+const GAP_MS = 1200;
+const MAX_ATTEMPTS = 5;
 
 /* Each destination lists Commons categories in preference order. If none of
    them yield a usable photo the script falls back to a file search. */
@@ -78,11 +82,36 @@ const FORCE = flag('force');
 const ONLY = value('only');
 const PICK = Math.max(1, Number(value('pick') || 1));
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Space requests out, and back off when Commons pushes back. */
+let lastCall = 0;
+async function polite(url) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const wait = lastCall + GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCall = Date.now();
+
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (res.ok) return res;
+
+    if (res.status === 429 || res.status === 503) {
+      if (attempt === MAX_ATTEMPTS) throw new Error(`${res.status} after ${attempt} tries`);
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const backoff = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : GAP_MS * 2 ** attempt;
+      await sleep(backoff);
+      continue;
+    }
+    throw new Error(`HTTP ${res.status}`);
+  }
+  throw new Error('exhausted retries');
+}
+
 async function api(params) {
   const url = `${API}?${new URLSearchParams({ format: 'json', formatversion: '2', ...params })}`;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) throw new Error(`Commons API ${res.status}`);
-  return res.json();
+  return (await polite(url)).json();
 }
 
 const imageProps = {
@@ -136,21 +165,29 @@ const meta = (info, field) => (info.extmetadata?.[field]?.value || '')
   .trim();
 
 async function download(url, dest) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) throw new Error(`download ${res.status}`);
+  const res = await polite(url);
   const buf = Buffer.from(await res.arrayBuffer());
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await fs.writeFile(dest, buf);
   return buf.length;
 }
 
-/** WebP is a bonus, never a reason to fail a download that already succeeded. */
-async function toWebp(jpgPath) {
+/**
+ * Commons originals run several MB, which would wreck LCP on the mobile ad
+ * traffic this page is built for. Cap the width and re-encode, plus a WebP
+ * companion. Optional: without sharp the full-size JPEG is still usable.
+ */
+async function optimize(jpgPath) {
   try {
     const { default: sharp } = await import('sharp');
-    const webp = jpgPath.replace(/\.jpe?g$/i, '.webp');
-    await sharp(jpgPath).webp({ quality: 82 }).toFile(webp);
-    return webp;
+    const resized = await sharp(jpgPath)
+      .rotate()
+      .resize({ width: 1920, withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+    await fs.writeFile(jpgPath, resized);
+    await sharp(resized).webp({ quality: 78 }).toFile(jpgPath.replace(/\.jpe?g$/i, '.webp'));
+    return resized.length;
   } catch {
     return null;
   }
@@ -163,6 +200,9 @@ async function exists(p) {
 const credits = [];
 const done = [];
 const failed = [];
+/* Destinations share categories (hero and raouche both use Raouche Rocks), so
+   without this the same photograph gets used for two different places. */
+const claimed = new Set();
 
 for (const t of TARGETS) {
   if (ONLY && t.key !== ONLY) continue;
@@ -175,16 +215,19 @@ for (const t of TARGETS) {
 
   let picked = null;
   let source = '';
+  const take = (ranked) => {
+    const free = ranked.filter((c) => !claimed.has(c.title));
+    return free[Math.min(PICK, free.length) - 1] || null;
+  };
 
   try {
     for (const cat of t.cats) {
-      const ranked = rank(await fromCategory(cat));
-      if (ranked.length >= PICK) { picked = ranked[PICK - 1]; source = `Category:${cat}`; break; }
-      if (ranked.length && !picked) { picked = ranked[0]; source = `Category:${cat}`; }
+      const choice = take(rank(await fromCategory(cat)));
+      if (choice) { picked = choice; source = `Category:${cat}`; break; }
     }
     if (!picked) {
-      const ranked = rank(await fromSearch(t.search));
-      if (ranked.length) { picked = ranked[Math.min(PICK, ranked.length) - 1]; source = `search: ${t.search}`; }
+      const choice = take(rank(await fromSearch(t.search)));
+      if (choice) { picked = choice; source = `search: ${t.search}`; }
     }
   } catch (err) {
     failed.push([t.key, err.message]);
@@ -199,10 +242,12 @@ for (const t of TARGETS) {
   }
 
   try {
-    const bytes = await download(picked.info.thumburl, dest);
-    const webp = await toWebp(dest);
-    const kb = Math.round(bytes / 1024);
-    console.log(`✓  ${t.key.padEnd(18)} ${kb}KB  ${picked.title.replace(/^File:/, '')}${webp ? '  (+webp)' : ''}`);
+    const raw = await download(picked.info.thumburl, dest);
+    const slim = await optimize(dest);
+    const kb = Math.round((slim ?? raw) / 1024);
+    const saved = slim ? ` (was ${Math.round(raw / 1024)}KB, +webp)` : '';
+    console.log(`✓  ${t.key.padEnd(18)} ${String(kb).padStart(4)}KB${saved}  ${picked.title.replace(/^File:/, '')}`);
+    claimed.add(picked.title);
     done.push(t.key);
     credits.push({
       key: t.key,
