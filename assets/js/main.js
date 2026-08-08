@@ -165,8 +165,8 @@
       if (!track) return;
 
       var step = function () {
-        var slide = $('.slide', track);
-        return slide ? slide.getBoundingClientRect().width + 14 : track.clientWidth * 0.85;
+        var first = track.firstElementChild;
+        return first ? first.getBoundingClientRect().width + 14 : track.clientWidth * 0.85;
       };
 
       // RTL: scrollLeft runs negative in most engines, so use signed deltas.
