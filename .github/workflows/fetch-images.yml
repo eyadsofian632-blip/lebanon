@@ -1,0 +1,65 @@
+name: Fetch destination photos
+
+# Downloads a real photograph for every itinerary destination from Wikimedia
+# Commons and commits them, so the site never ships with empty image slots.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-fetch images that already exist'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fetch-images.mjs'
+      - '.github/workflows/fetch-images.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-images
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Optional: enables WebP companions alongside each JPEG.
+      - name: Install sharp
+        run: npm install --no-save --no-audit --no-fund sharp
+        continue-on-error: true
+
+      - name: Fetch photos
+        run: node scripts/fetch-images.mjs ${{ inputs.force && '--force' || '' }}
+
+      - name: Show what landed
+        run: |
+          echo "### Downloaded" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          find assets -type f \( -name '*.jpg' -o -name '*.webp' \) -printf '%-58p %6s KB\n' \
+            | sed 's/\([0-9]*\) KB/\1/' | awk '{printf "%-58s %6.0f KB\n", $1, $2/1024}' \
+            >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets CREDITS.md
+          if git diff --staged --quiet; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+          git commit -m "Add destination photos fetched from Wikimedia Commons
+
+          Downloaded by .github/workflows/fetch-images.yml. Attribution and
+          licence for every image are recorded in CREDITS.md."
+          git push
