@@ -81,6 +81,11 @@ const value = (n) => (args.find((a) => a.startsWith(`--${n}=`)) || '').split('='
 const FORCE = flag('force');
 const ONLY = value('only');
 const PICK = Math.max(1, Number(value('pick') || 1));
+/* Writes the top N candidates per destination as thumbnails under
+   .candidates/ instead of downloading, so they can be eyeballed before
+   anything is pinned. Category rank is size, not suitability: a tourism
+   category will happily hand you a protest, a banquet or a fish. */
+const CANDIDATES = Number(value('candidates') || 0);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -208,8 +213,28 @@ for (const t of TARGETS) {
   if (ONLY && t.key !== ONLY) continue;
 
   const dest = path.join(ROOT, t.out);
-  if (!FORCE && await exists(dest)) {
+  if (!CANDIDATES && !FORCE && await exists(dest)) {
     console.log(`·  ${t.key.padEnd(18)} already present, skipping`);
+    continue;
+  }
+
+  /* A pinned file is one a human has actually looked at, so it wins outright. */
+  if (t.pin && !CANDIDATES) {
+    const url = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(t.pin)}?width=${WIDTH}`;
+    try {
+      const raw = await download(url, dest);
+      const slim = await optimize(dest);
+      console.log(`✓  ${t.key.padEnd(18)} ${String(Math.round((slim ?? raw) / 1024)).padStart(4)}KB  [pinned] ${t.pin}`);
+      done.push(t.key);
+      credits.push({
+        key: t.key, file: t.out, title: t.pin,
+        page: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(t.pin)}`,
+        author: 'انظر صفحة الملف', licence: 'انظر صفحة الملف', source: 'pinned',
+      });
+    } catch (err) {
+      failed.push([t.key, `pinned: ${err.message}`]);
+      console.log(`✗  ${t.key.padEnd(18)} pinned file failed: ${err.message}`);
+    }
     continue;
   }
 
@@ -221,14 +246,36 @@ for (const t of TARGETS) {
   };
 
   try {
+    let pool = [];
     for (const cat of t.cats) {
-      const choice = take(rank(await fromCategory(cat)));
-      if (choice) { picked = choice; source = `Category:${cat}`; break; }
+      pool = pool.concat(rank(await fromCategory(cat)));
+      if (pool.length >= (CANDIDATES || 1) + 2) break;
     }
-    if (!picked) {
-      const choice = take(rank(await fromSearch(t.search)));
-      if (choice) { picked = choice; source = `search: ${t.search}`; }
+    if (pool.length < (CANDIDATES || 1)) {
+      pool = pool.concat(rank(await fromSearch(t.search)));
     }
+    // Same file can appear in several categories.
+    const seen = new Set();
+    pool = pool.filter((c) => !seen.has(c.title) && seen.add(c.title));
+
+    if (CANDIDATES) {
+      const dir = path.join(ROOT, '.candidates', t.key);
+      await fs.mkdir(dir, { recursive: true });
+      let i = 0;
+      for (const c of pool.slice(0, CANDIDATES)) {
+        i++;
+        const name = c.title.replace(/^File:/, '').replace(/[^\w.\- ]+/g, '_').slice(0, 70);
+        const thumb = c.info.thumburl.replace(/\/\d+px-/, '/520px-');
+        try {
+          await download(thumb, path.join(dir, `${String(i).padStart(2, '0')}__${name}`));
+        } catch { /* one bad candidate should not stop the sheet */ }
+      }
+      console.log(`·  ${t.key.padEnd(18)} ${i} candidates`);
+      continue;
+    }
+
+    picked = take(pool);
+    source = 'category/search';
   } catch (err) {
     failed.push([t.key, err.message]);
     console.log(`✗  ${t.key.padEnd(18)} ${err.message}`);
