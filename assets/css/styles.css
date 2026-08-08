@@ -501,8 +501,9 @@ bdi{ unicode-bidi:isolate; }
 .hotel__gal{ display:grid; gap:10px; }
 @media (min-width:600px){ .hotel__gal{ gap:12px; } }
 .hotel__main{ aspect-ratio:16/10; border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); }
-.hotel__thumbs{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-.hotel__thumbs .shot{ aspect-ratio:1/1; border-radius:var(--radius-sm); }
+.hotel__thumbs{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+@media (min-width:600px){ .hotel__thumbs{ gap:12px; } }
+.hotel__thumbs .shot{ aspect-ratio:4/3; border-radius:var(--radius-sm); }
 
 .stars{ color:#C9A227; font-size:15px; letter-spacing:.16em; line-height:1; }
 .hotel__name{
